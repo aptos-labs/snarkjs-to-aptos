@@ -1,12 +1,12 @@
-use std::{env, fs};
+use std::fs;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 use std::process::Command;
 use ark_bn254::{Fq, Fq2, Fr, G1Projective, G2Projective};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use ark_ff::PrimeField;
-use ark_serialize::CanonicalSerialize;
 use num_bigint::BigUint;
 use num_traits::Num;
 use hex;
@@ -88,6 +88,27 @@ fn read_file_to_string(file_path: &str) -> Result<String> {
     Ok(content)
 }
 
+fn copy_dir_all(src: &Path, dest: &Path) -> Result<()> {
+    if !dest.exists() {
+        fs::create_dir_all(dest)?; // Create missing directories
+    }
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+
+        if entry_path.is_dir() {
+            // Recursively copy subdirectories
+            copy_dir_all(&entry_path, &dest_path)?;
+        } else {
+            // Copy files
+            fs::copy(&entry_path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     let snarkjs_vk_path = std::env::var("IN_VK_PATH").unwrap();
     let snarkjs_public_input_path = std::env::var("IN_PUBLIC_INPUT_PATH").unwrap();
@@ -102,6 +123,8 @@ fn main() {
 
     let snarkjs_public_input_str = read_file_to_string(&snarkjs_public_input_path).unwrap();
     let snarkjs_public_input: SnarkJsGroth16PublicInput = serde_json::from_str(&snarkjs_public_input_str).unwrap();
+    copy_dir_all(Path::new("groth16_module_template"), Path::new(out_dir.as_str())).unwrap();
+
     let output = Command::new("bash")
         .envs(std::env::vars())
         .arg("-c")
